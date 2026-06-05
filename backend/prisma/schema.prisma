@@ -1,0 +1,407 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  phone             String?    @unique
+  password          String
+  firstName         String
+  lastName          String
+  username          String?    @unique
+  avatar            String?
+  bio               String?
+  referralCode      String     @unique @default(cuid())
+  referredById      String?
+  referredBy        User?      @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals         User[]     @relation("Referrals")
+  role              Role       @default(USER)
+  
+  // Account Status
+  emailVerified      Boolean    @default(false)
+  phoneVerified      Boolean    @default(false)
+  isActive           Boolean    @default(true)
+  isSuspended        Boolean    @default(false)
+  twoFactorEnabled   Boolean    @default(false)
+  twoFactorSecret    String?
+  
+  // Profile
+  kycStatus          KYCStatus  @default(PENDING)
+  kycDocument        String?
+  documentType       String?
+  documentNumber     String?
+  
+  // Security
+  lastLogin          DateTime?
+  loginAttempts      Int        @default(0)
+  lockUntil          DateTime?
+  
+  // Relations
+  wallet             Wallet?
+  transactions       Transaction[]
+  deposits           Deposit[]
+  withdrawals        Withdrawal[]
+  tasks              UserTask[]
+  rewards            Reward[]
+  referralStats      ReferralStat?
+  notifications      Notification[]
+  adminLogs          AdminLog[]
+  
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  
+  @@index([referredById])
+  @@index([email])
+  @@index([referralCode])
+}
+
+model Wallet {
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  balance           Float      @default(0)
+  bonusBalance      Float      @default(0)
+  earnings          Float      @default(0)
+  referralEarnings  Float      @default(0)
+  
+  totalDeposited    Float      @default(0)
+  totalWithdrawn    Float      @default(0)
+  
+  currency          String     @default("USD")
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+}
+
+model Transaction {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type              TransactionType
+  amount            Float
+  description       String
+  status            TransactionStatus @default(PENDING)
+  
+  relatedDeposit    Deposit?   @relation("DepositTransaction")
+  relatedWithdrawal Withdrawal? @relation("WithdrawalTransaction")
+  
+  metadata          Json?
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Deposit {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount            Float
+  currency          String     @default("USD")
+  paymentMethod     PaymentMethod
+  paymentProvider   String
+  transactionId     String?
+  reference         String?    @unique
+  
+  status            DepositStatus @default(PENDING)
+  
+  // Payment details
+  stripePaymentId   String?
+  paypalOrderId     String?
+  flutterWaveId     String?
+  mpesaCheckoutId   String?
+  cryptoTxHash      String?
+  
+  metadata          Json?
+  
+  transaction       Transaction? @relation("DepositTransaction", fields: [id], references: [id])
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+}
+
+model Withdrawal {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount            Float
+  currency          String     @default("USD")
+  paymentMethod     PaymentMethod
+  bankName          String?
+  accountNumber     String?
+  accountHolder     String?
+  
+  status            WithdrawalStatus @default(PENDING)
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectionReason   String?
+  
+  metadata          Json?
+  
+  transaction       Transaction? @relation("WithdrawalTransaction", fields: [id], references: [id])
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model Task {
+  id                String     @id @default(cuid())
+  title             String
+  description       String
+  type              TaskType
+  category          String
+  
+  reward            Float
+  dailyLimit        Int        @default(1)
+  
+  status            TaskStatus @default(ACTIVE)
+  
+  // External data
+  videoUrl          String?
+  surveyUrl         String?
+  articleContent    String?
+  offerUrl          String?
+  
+  completions       UserTask[]
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model UserTask {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  taskId            String
+  task              Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  status            TaskCompletionStatus @default(PENDING)
+  completedAt       DateTime?
+  reward            Float
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@unique([userId, taskId])
+  @@index([userId])
+  @@index([taskId])
+}
+
+model Reward {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount            Float
+  type              RewardType
+  reason            String
+  
+  claimed           Boolean    @default(false)
+  claimedAt         DateTime?
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([claimed])
+}
+
+model Referral {
+  id                String     @id @default(cuid())
+  referrerCode      String
+  level             Int        @default(1)
+  commissionRate    Float      @default(0.1) // 10%
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model ReferralStat {
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  totalReferrals    Int        @default(0)
+  level1Referrals   Int        @default(0)
+  level2Referrals   Int        @default(0)
+  level3Referrals   Int        @default(0)
+  
+  totalCommission   Float      @default(0)
+  level1Commission  Float      @default(0)
+  level2Commission  Float      @default(0)
+  level3Commission  Float      @default(0)
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model Notification {
+  id                String     @id @default(cuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title             String
+  message           String
+  type              NotificationType
+  
+  read              Boolean    @default(false)
+  readAt            DateTime?
+  
+  actionUrl         String?
+  data              Json?
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  @@index([userId])
+  @@index([read])
+}
+
+model AdminLog {
+  id                String     @id @default(cuid())
+  adminId           String
+  admin             User       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  action            String
+  entity            String
+  entityId          String
+  description       String
+  changes           Json?
+  
+  ipAddress         String?
+  userAgent         String?
+  
+  createdAt         DateTime   @default(now())
+  
+  @@index([adminId])
+  @@index([entity])
+}
+
+model SystemSetting {
+  id                String     @id @default(cuid())
+  key               String     @unique
+  value             Json
+  description       String?
+  
+  updatedAt         DateTime   @updatedAt
+}
+
+// Enums
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum KYCStatus {
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  REFERRAL_BONUS
+  TASK_REWARD
+  ADMIN_BONUS
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DepositStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  MPESA
+  PAYPAL
+  STRIPE
+  FLUTTERWAVE
+  CRYPTO
+}
+
+enum TaskType {
+  VIDEO
+  SURVEY
+  ARTICLE
+  OFFER
+  CHECKIN
+}
+
+enum TaskStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum TaskCompletionStatus {
+  PENDING
+  COMPLETED
+  VERIFIED
+  REJECTED
+}
+
+enum RewardType {
+  REFERRAL
+  TASK_COMPLETION
+  BONUS
+  LOYALTY
+}
+
+enum NotificationType {
+  TRANSACTION
+  REFERRAL
+  REWARD
+  SYSTEM
+  SECURITY
+  PROMOTION
+}

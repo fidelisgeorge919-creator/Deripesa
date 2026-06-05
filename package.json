@@ -1,0 +1,21 @@
+{
+  "name": "Deripesa",
+  "version": "1.0.0",
+  "description": "Production-ready earning platform with referrals, wallet, and payment integration",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently 'npm:dev:backend' 'npm:dev:frontend'",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm:build:backend && npm:build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:rebuild": "docker-compose up -d --build",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
